@@ -7,138 +7,184 @@
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
 #include <RTClib.h>
-#define I2C_SDA         8
-#define I2C_SCL         9
-#define SPI_MOSI        11
-#define SPI_SCK         12
-#define TFT_CS          10
-#define TFT_DC          15
-#define TFT_RST         16
-#define TFT_BL          17
-#define SD_CS           14
-#define SD_MISO         13
-#define I2S_BCLK        4
-#define I2S_LRC         5
-#define I2S_DOUT        6
-#define MPU_INT_PIN     7
-#define TOUCH_ADDR      0x15
-#define MAX_TRACKS      50
-#define SLEEP_TIMEOUT_MS    120000
-#define SHAKE_THRESHOLD     15
-#define SHAKE_DURATION      3
-#define WAKE_DEBOUNCE_MS    500
-#define TOUCH_DEBOUNCE_MS   300
-#define UI_REFRESH_MS       500
-#define CLR_BG          0x0000
-#define CLR_PANEL       0x18E3
-#define CLR_ACCENT      0x07FF
-#define CLR_ACCENT2     0xF81F
-#define CLR_WHITE       0xFFFF
-#define CLR_GRAY        0x7BEF
-#define CLR_DARK        0x2104
-#define CLR_GREEN       0x07E0
-#define CLR_RED         0xF800
-#define CLR_ORANGE      0xFD20
-#define CLR_PROGRESS_BG 0x3186
-#define CLR_VOL_BG      0x3186
-#define BTN_PREV_X      40
-#define BTN_PREV_Y      170
-#define BTN_PLAY_X      140
-#define BTN_PLAY_Y      170
-#define BTN_NEXT_X      240
-#define BTN_NEXT_Y      170
-#define BTN_R           28
-#define VOL_X           30
-#define VOL_Y           220
-#define VOL_W           200
-#define VOL_H           12
-#define PROG_X          20
-#define PROG_Y          138
-#define PROG_W          280
-#define PROG_H          8
+#define I2C_SDA 8
+#define I2C_SCL 9
+#define SPI_MOSI 11
+#define SPI_SCK 12
+#define SD_CS 14
+#define SD_MISO 13
+#define I2S_BCLK 4
+#define I2S_LRC 5
+#define I2S_DOUT 6
+#define MPU_INT_PIN 7
+#define TOUCH_ADDR 0x15
+#define MAX_TRACKS 50
+#define SLEEP_TIMEOUT_MS 120000
 TFT_eSPI tft = TFT_eSPI();
 Audio audio;
 Adafruit_MPU6050 mpu;
 RTC_DS3231 rtc;
-String trackList[MAX_TRACKS];
+String tracks[MAX_TRACKS];
 int trackCount = 0;
-int currentTrack = 0;
-bool isPlaying = false;
-int volume = 15;
-unsigned long lastActivityTime = 0;
-unsigned long lastUIUpdate = 0;
-unsigned long songStartTime = 0;
-unsigned long songPausedAt = 0;
-unsigned long pauseOffset = 0;
-bool needsFullRedraw = true;
-int lastDrawnSecond = -1;
-int lastDrawnProgress = -1;
-String lastDrawnTrackName = "";
-bool lastDrawnPlayState = false;
-int lastDrawnVolume = -1;
-String lastDrawnTime = "";
-bool rtcAvailable = false;
-bool sdAvailable = false;
-bool mpuAvailable = false;
+int cur = 0;
+bool playing = false;
+unsigned long lastTouch = 0;
+unsigned long lastActive = 0;
 bool readTouch(int &x, int &y) {
   Wire.beginTransmission(TOUCH_ADDR);
   Wire.write(0x02);
   Wire.endTransmission();
   Wire.requestFrom(TOUCH_ADDR, 5);
   if (Wire.available() < 5) return false;
-  uint8_t numPoints = Wire.read();
-  if (numPoints == 0 || numPoints > 5) return false;
-  uint8_t xHigh = Wire.read();
-  uint8_t xLow  = Wire.read();
-  uint8_t yHigh = Wire.read();
-  uint8_t yLow  = Wire.read();
-  x = ((xHigh & 0x0F) << 8) | xLow;
-  y = ((yHigh & 0x0F) << 8) | yLow;
+  uint8_t n = Wire.read();
+  if (n == 0 || n > 5) return false;
+  uint8_t xH = Wire.read(), xL = Wire.read();
+  uint8_t yH = Wire.read(), yL = Wire.read();
+  x = ((xH & 0x0F) << 8) | xL;
+  y = ((yH & 0x0F) << 8) | yL;
   return true;
-}
-bool insideCircle(int tx, int ty, int cx, int cy, int r) {
-  int dx = tx - cx;
-  int dy = ty - cy;
-  return (dx * dx + dy * dy) <= (r * r);
-}
-bool insideRect(int tx, int ty, int rx, int ry, int rw, int rh) {
-  return tx >= rx && tx <= rx + rw && ty >= ry && ty <= ry + rh;
 }
 void scanTracks() {
   trackCount = 0;
   File root = SD.open("/");
-  if (!root) return;
-  while (true) {
-    File entry = root.openNextFile();
-    if (!entry) break;
-    if (entry.isDirectory()) { entry.close(); continue; }
-    String name = String(entry.name());
+  while (File f = root.openNextFile()) {
+    String name = String(f.name());
     name.toLowerCase();
-    if (name.endsWith(".mp3") || name.endsWith(".wav") || name.endsWith(".flac")) {
-      trackList[trackCount] = "/" + String(entry.name());
-      trackCount++;
+    if (name.endsWith(".mp3") || name.endsWith(".wav")) {
+      tracks[trackCount++] = "/" + String(f.name());
       if (trackCount >= MAX_TRACKS) break;
     }
-    entry.close();
+    f.close();
   }
   root.close();
 }
-String getTrackDisplayName(int index) {
-  if (index < 0 || index >= trackCount) return "No Tracks";
-  String name = trackList[index];
-  int lastSlash = name.lastIndexOf('/');
-  if (lastSlash >= 0) name = name.substring(lastSlash + 1);
-  int dot = name.lastIndexOf('.');
-  if (dot > 0) name = name.substring(0, dot);
-  if (name.length() > 22) name = name.substring(0, 19) + "...";
-  return name;
+String displayName(int i) {
+  if (i < 0 || i >= trackCount) return "No Tracks";
+  String s = tracks[i];
+  s = s.substring(s.lastIndexOf('/') + 1);
+  s = s.substring(0, s.lastIndexOf('.'));
+  if (s.length() > 20) s = s.substring(0, 17) + "...";
+  return s;
 }
-String getTimeString() {
-  if (!rtcAvailable) return "--:--";
-  DateTime now = rtc.now();
-  char buf[12];
-  int hour12 = now.hour() % 12;
-  if (hour12 == 0) hour12 = 12;
-  sprintf(buf, "%d:%02d %s", hour12, now.minute(), now.hour() < 12 ? "AM" : "PM");
-  return String(buf);
+void drawUI() {
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setTextSize(1);
+  String name = displayName(cur);
+  tft.setCursor((320 - name.length() * 6) / 2, 50);
+  tft.print(name);
+  tft.setTextSize(1);
+  tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+  tft.setCursor(130, 70);
+  tft.print(String(cur + 1) + " / " + String(trackCount));
+  tft.fillRoundRect(20, 110, 80, 60, 8, 0x18E3);
+  tft.fillRoundRect(120, 110, 80, 60, 8, 0x07FF);
+  tft.fillRoundRect(220, 110, 80, 60, 8, 0x18E3);
+  tft.setTextSize(2);
+  tft.setTextColor(TFT_WHITE, 0x18E3);
+  tft.setCursor(38, 130);
+  tft.print("PREV");
+  tft.setTextColor(TFT_BLACK, 0x07FF);
+  tft.setCursor(132, 130);
+  tft.print(playing ? "PAUSE" : "PLAY");
+  tft.setTextColor(TFT_WHITE, 0x18E3);
+  tft.setCursor(238, 130);
+  tft.print("NEXT");
 }
+void playTrack(int i) {
+  if (i < 0 || i >= trackCount) return;
+  cur = i;
+  audio.connecttoFS(SD, tracks[cur].c_str());
+  playing = true;
+  lastActive = millis();
+  drawUI();
+}
+void goToDeepSleep() {
+  digitalWrite(17, LOW);
+  audio.stopSong();
+  mpu.getMotionInterruptStatus();
+  esp_sleep_enable_ext1_wakeup(1ULL << MPU_INT_PIN, ESP_EXT1_WAKEUP_ANY_HIGH);
+  esp_deep_sleep_start();
+}
+void setup() {
+  Serial.begin(115200);
+  delay(500);
+  if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT1) {
+    delay(500);
+  }
+  tft.init();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK);
+  pinMode(17, OUTPUT);
+  digitalWrite(17, HIGH);
+  Wire.begin(I2C_SDA, I2C_SCL);
+  rtc.begin();
+  pinMode(MPU_INT_PIN, INPUT);
+  if (mpu.begin()) {
+    mpu.setHighPassFilter(MPU6050_HIGHPASS_0_63_HZ);
+    mpu.setMotionDetectionThreshold(15);
+    mpu.setMotionDetectionDuration(3);
+    mpu.setInterruptPinLatch(true);
+    mpu.setInterruptPinPolarity(false);
+    mpu.setMotionInterrupt(true);
+  }
+  SPI.begin(SPI_SCK, SD_MISO, SPI_MOSI, SD_CS);
+  if (!SD.begin(SD_CS)) {
+    tft.setTextSize(2);
+    tft.setTextColor(TFT_RED);
+    tft.setCursor(40, 100);
+    tft.print("SD Card Error!");
+    while (true) delay(1000);
+  }
+  audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
+  audio.setVolume(15);
+  scanTracks();
+  if (trackCount == 0) {
+    tft.setTextSize(2);
+    tft.setTextColor(TFT_RED);
+    tft.setCursor(40, 100);
+    tft.print("No tracks on SD!");
+    while (true) delay(1000);
+  }
+  lastActive = millis();
+  drawUI();
+}
+void loop() {
+  audio.loop();
+  int tx, ty;
+  if (readTouch(tx, ty) && millis() - lastTouch > 300) {
+    lastTouch = millis();
+    lastActive = millis();
+    if (ty >= 110 && ty <= 170) {
+      if (tx >= 20 && tx <= 100) {
+        audio.stopSong();
+        cur = (cur - 1 + trackCount) % trackCount;
+        playTrack(cur);
+      }
+      else if (tx >= 120 && tx <= 200) {
+        if (!playing && !audio.isRunning()) {
+          playTrack(cur);
+        } else {
+          audio.pauseResume();
+          playing = !playing;
+          drawUI();
+        }
+      }
+      else if (tx >= 220 && tx <= 300) {
+        audio.stopSong();
+        cur = (cur + 1) % trackCount;
+        playTrack(cur);
+      }
+    }
+  }
+  if (!audio.isRunning() && playing) {
+    cur = (cur + 1) % trackCount;
+    playTrack(cur);
+  }
+  if (!audio.isRunning() && !playing) {
+    if (millis() - lastActive > SLEEP_TIMEOUT_MS) goToDeepSleep();
+  }
+}
+void audio_info(const char *info) { Serial.println(info); }
+void audio_id3data(const char *info) { Serial.println(info); }
+void audio_eof_mp3(const char *info) { Serial.println(info); }
