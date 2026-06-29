@@ -79,4 +79,4 @@ This prototype validates the overall hardware architecture. Future revisions wil
 ## Built for
 
 [Macondo](https://macondo.hackclub.com/) 🚀
-```
+
