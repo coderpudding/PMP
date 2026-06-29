@@ -46,7 +46,7 @@ The entire system is centered around the ESP32-S3. Audio is handled through an I
 
 ### Overall Enclosure
 
-![Overall Enclosure](full enclosure.png)
+![Overall Enclosure](fullenclosure.png)
 
 The enclosure was designed around the hardware rather than forcing the hardware to fit inside an existing case. The shell was built first, followed by the screen opening, speaker grille, USB-C cutout, SD card slot, and magnet mounting holes.
 
