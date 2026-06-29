@@ -1,18 +1,17 @@
 
-
 # My PMP
 
 > A prototype portable media player built around the ESP32-S3.
 
-This is my first hardware project. Since I dont know pcb designing, I built this prototype using off-the-shelf modules to learn the complete hardware design process, later on I plan to integrate everything onto a single PCB and turn it into the compact clip-on media player I originally envisioned
+This is my first hardware project. Since I don't know PCB design yet, I built this prototype using off-the-shelf modules to learn the complete hardware development process. My long-term goal is to integrate everything onto a single PCB and turn it into the compact clip-on media player I originally envisioned.
 
 ---
 
 ## The Idea
 
-I wanted a dedicated music player for running without the distractions of a smartphone
+I wanted a dedicated music player for running without the distractions of a smartphone.
 
-The original concept was a clip-on device that simply plays music and gets out of the way, This prototype focuses on validating the core hardware before moving to a custom PCB and a much smaller enclosure
+The original concept was a clip-on device that simply plays music and gets out of the way. This prototype focuses on validating the core hardware before moving to a custom PCB and a much smaller enclosure.
 
 ---
 
@@ -76,5 +75,8 @@ This prototype validates the overall hardware architecture. Future revisions wil
 - Reducing internal wiring
 
 ---
-## built for [macondo](https://macondo.hackclub.com/)
----
+
+## Built for
+
+[Macondo](https://macondo.hackclub.com/) 🚀
+```
