@@ -52,7 +52,7 @@ The enclosure was designed around the hardware rather than forcing the hardware 
 
 ### Rear Panel
 
-![Back Mesh](back mesh.png)
+![Back Mesh](backmesh.png)
 
 The rear panel contains the speaker grille, allowing sound to exit while maintaining the strength of the enclosure. Every opening was positioned to line up with the internal hardware before any printing.
 
